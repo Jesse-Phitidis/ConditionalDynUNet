@@ -91,7 +91,7 @@ class ConditionalUnetBasicBlock(nn.Module):
         out = self.conv1(inp)
         out = self.norm1(out)
         out = self.lrelu(out)
-        if inp.shape[1] != get_in_channels(self.conv2):
+        if out.shape[1] != get_in_channels(self.conv2):
             c = interpolate(c, out.shape[2:])
             out = torch.cat((out, c), dim=1)
         out = self.conv2(out)
@@ -180,7 +180,7 @@ class ConditionalUnetResBlock(nn.Module):
         out = self.conv1(inp)
         out = self.norm1(out)
         out = self.lrelu(out)
-        if inp.shape[1] != get_in_channels(self.conv2):
+        if out.shape[1] != get_in_channels(self.conv2):
             c = interpolate(c, out.shape[2:])
             out = torch.cat((out, c), dim=1)
         out = self.conv2(out)
