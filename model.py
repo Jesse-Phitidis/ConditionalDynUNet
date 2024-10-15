@@ -59,7 +59,14 @@ class ConditionalUnetBasicBlock(nn.Module):
         norm_name: tuple | str,
         act_name: tuple | str = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
         dropout: tuple | str | float | None = None,
+        emb_layers: int = 1,
+        hidden_dim: int | None = None,
+        emb_dim: int | None = None,
     ):
+        
+        hidden_dim = conditional_channels if hidden_dim is None else hidden_dim
+        emb_dim = conditional_channels if emb_dim is None else emb_dim
+        
         super().__init__()
         self.conv1 = get_conv_layer(
             spatial_dims,
@@ -72,9 +79,26 @@ class ConditionalUnetBasicBlock(nn.Module):
             norm=None,
             conv_only=False,
         )
+        
+        self.emb_block = nn.Sequential()
+        self.emb_block.append(nn.Identity())
+        for i in range(emb_layers):
+            layer = get_conv_layer(
+                spatial_dims=spatial_dims,
+                in_channels=hidden_dim if i != 0 else conditional_channels,
+                out_channels=hidden_dim if i != emb_layers - 1 else emb_dim,
+                kernel_size=1,
+                stride=1,
+                dropout=None,
+                act=act_name,
+                norm=norm_name,
+                conv_only=False
+            )
+            self.emb_block.append(layer)
+        
         self.conv2 = get_conv_layer(
             spatial_dims,
-            out_channels + conditional_channels,
+            out_channels + emb_dim,
             out_channels,
             kernel_size=kernel_size,
             stride=1,
@@ -93,7 +117,8 @@ class ConditionalUnetBasicBlock(nn.Module):
         out = self.lrelu(out)
         if out.shape[1] != get_in_channels(self.conv2):
             c = interpolate(c, out.shape[2:])
-            out = torch.cat((out, c), dim=1)
+            c_emb = self.emb_block(c)
+            out = torch.cat([out, c_emb], dim=1)
         out = self.conv2(out)
         out = self.norm2(out)
         out = self.lrelu(out)
@@ -130,7 +155,14 @@ class ConditionalUnetResBlock(nn.Module):
         norm_name: tuple | str,
         act_name: tuple | str = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
         dropout: tuple | str | float | None = None,
+        emb_layers: int = 1,
+        hidden_dim: int | None = None,
+        emb_dim: int | None = None,
     ):
+        
+        hidden_dim = conditional_channels if hidden_dim is None else hidden_dim
+        emb_dim = conditional_channels if emb_dim is None else emb_dim
+        
         super().__init__()
         self.conv1 = get_conv_layer(
             spatial_dims,
@@ -143,9 +175,26 @@ class ConditionalUnetResBlock(nn.Module):
             norm=None,
             conv_only=False,
         )
+        
+        self.emb_block = nn.Sequential()
+        self.emb_block.append(nn.Identity())
+        for i in range(emb_layers):
+            layer = get_conv_layer(
+                spatial_dims=spatial_dims,
+                in_channels=hidden_dim if i != 0 else conditional_channels,
+                out_channels=hidden_dim if i != emb_layers - 1 else emb_dim,
+                kernel_size=1,
+                stride=1,
+                dropout=None,
+                act=act_name,
+                norm=norm_name,
+                conv_only=False
+            )
+            self.emb_block.append(layer)
+        
         self.conv2 = get_conv_layer(
             spatial_dims,
-            out_channels + conditional_channels,
+            out_channels + emb_dim,
             out_channels,
             kernel_size=kernel_size,
             stride=1,
@@ -182,7 +231,8 @@ class ConditionalUnetResBlock(nn.Module):
         out = self.lrelu(out)
         if out.shape[1] != get_in_channels(self.conv2):
             c = interpolate(c, out.shape[2:])
-            out = torch.cat((out, c), dim=1)
+            c_emb = self.emb_block(c)
+            out = torch.cat([out, c_emb], dim=1)
         out = self.conv2(out)
         out = self.norm2(out)
         if hasattr(self, "conv3"):
@@ -228,7 +278,14 @@ class ConditionalUnetUpBlock(nn.Module):
         act_name: tuple | str = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
         dropout: tuple | str | float | None = None,
         trans_bias: bool = False,
+        emb_layers: int = 1,
+        hidden_dim: int | None = None,
+        emb_dim: int | None = None,
     ):
+        
+        hidden_dim = conditional_channels if hidden_dim is None else hidden_dim
+        emb_dim = conditional_channels if emb_dim is None else emb_dim
+        
         super().__init__()
         upsample_stride = upsample_kernel_size
         self.transp_conv = get_conv_layer(
@@ -244,9 +301,26 @@ class ConditionalUnetUpBlock(nn.Module):
             conv_only=False,
             is_transposed=True,
         )
+        
+        self.emb_block = nn.Sequential()
+        self.emb_block.append(nn.Identity())
+        for i in range(emb_layers):
+            layer = get_conv_layer(
+                spatial_dims=spatial_dims,
+                in_channels=hidden_dim if i != 0 else conditional_channels,
+                out_channels=hidden_dim if i != emb_layers - 1 else emb_dim,
+                kernel_size=1,
+                stride=1,
+                dropout=None,
+                act=act_name,
+                norm=norm_name,
+                conv_only=False
+            )
+            self.emb_block.append(layer)
+        
         self.conv_block = UnetBasicBlock(
             spatial_dims,
-            out_channels + out_channels + conditional_channels,
+            out_channels + out_channels + emb_dim,
             out_channels,
             kernel_size=kernel_size,
             stride=1,
@@ -260,7 +334,8 @@ class ConditionalUnetUpBlock(nn.Module):
         out = self.transp_conv(inp)
         if out.shape[1] + skip.shape[1] != get_in_channels(self.conv_block):
             c = interpolate(c, out.shape[2:])
-            out = torch.cat((out, skip, c), dim=1)
+            c_emb = self.emb_block(c)
+            out = torch.cat([out, skip, c_emb], dim=1)
         else:
             out = torch.cat((out, skip), dim=1)
         out = self.conv_block(out)
@@ -276,6 +351,9 @@ class ConditionalDynUNet(DynUNet):
         self,
         conditional_channels: list[int],
         res_block: bool = False,
+        emb_layers: int = 0,
+        hidden_dim: int | None = None,
+        emb_dim: int | None = None,
         *args,
         **kwargs
     ):
@@ -285,12 +363,18 @@ class ConditionalDynUNet(DynUNet):
             conditional_channels: same len as kernels e.g. if kernel_size = [3,3,3,3] then conditioning_channels=[5,0,0,0]
                 means 5 additional conditioning channels of size (B,5,...) are expected and will be interpolated to the correct
                 size in the spatial dims if they are not already, e.g. (B,5,H,W,D).
+            emb_layers: optional. If non zero this is the number of convolutional layers (conv - act - norm) for embedding the conditioning.
+            hidden_dim: only used if emb_layers > 0.
+            emb_dim: only used if emb_layers > 0.
             *args: see DynUNet.
             **kwargs: see DynUNet.
         """
 
         self.conditional_channels = conditional_channels
         self.res_block = res_block
+        self.emb_layers = emb_layers
+        self.hidden_dim = hidden_dim
+        self.emb_dim = emb_dim
         super().__init__(res_block=res_block, *args, **kwargs)
 
     def forward(self, x, c=None):
@@ -315,6 +399,9 @@ class ConditionalDynUNet(DynUNet):
             self.norm_name,
             self.act_name,
             dropout=self.dropout,
+            emb_layers=self.emb_layers,
+            hidden_dim=self.hidden_dim,
+            emb_dim=self.emb_dim
         )
     
     def get_upsamples(self):
@@ -360,6 +447,9 @@ class ConditionalDynUNet(DynUNet):
                     "dropout": self.dropout,
                     "upsample_kernel_size": up_kernel,
                     "trans_bias": trans_bias,
+                    "emb_layers": self.emb_layers,
+                    "hidden_dim": self.hidden_dim,
+                    "emb_dim": self.emb_dim
                 }
                 layer = conv_block(**params)
                 layers.append(layer)
@@ -375,6 +465,9 @@ class ConditionalDynUNet(DynUNet):
                     "norm_name": self.norm_name,
                     "act_name": self.act_name,
                     "dropout": self.dropout,
+                    "emb_layers": self.emb_layers,
+                    "hidden_dim": self.hidden_dim,
+                    "emb_dim": self.emb_dim
                 }
                 layer = conv_block(**params)
                 layers.append(layer)
