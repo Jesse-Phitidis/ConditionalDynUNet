@@ -363,7 +363,7 @@ class ConditionalDynUNet(DynUNet):
             conditional_channels: same len as kernels e.g. if kernel_size = [3,3,3,3] then conditioning_channels=[5,0,0,0]
                 means 5 additional conditioning channels of size (B,5,...) are expected and will be interpolated to the correct
                 size in the spatial dims if they are not already, e.g. (B,5,H,W,D).
-            emb_layers: optional. If non zero this is the number of convolutional layers (conv - act - norm) for embedding the conditioning.
+            emb_layers: optional. If non zero this is the number of convolutional layers (conv - norm - act) for embedding the conditioning.
             hidden_dim: only used if emb_layers > 0.
             emb_dim: only used if emb_layers > 0.
             *args: see DynUNet.
